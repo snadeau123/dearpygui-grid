@@ -1,3 +1,8 @@
+# Copyright Notice:
+# This script is based on code from the dearpygui-grid repository by Atlamillias available at:
+# https://github.com/Atlamillias/dearpygui-grid
+# No license information was provided with the original code. Credit for the original work goes to Atlamillias.
+
 import sys
 import numbers
 import functools
@@ -13,7 +18,7 @@ from dearpygui._dearpygui import (
 )
 from typing import (
     Any,
-
+    Union,
     Protocol,
     Callable,
     Literal,
@@ -25,9 +30,10 @@ from typing import (
     Iterable,
     Annotated,
     TypeVar,
-
+    Tuple,
     overload,
     cast,
+    Optional
 )
 from typing_extensions import Self
 
@@ -36,10 +42,10 @@ from typing_extensions import Self
 _T = TypeVar('_T')
 _N = TypeVar('_N', bound=numbers.Real)
 
-Item   = int | str
-FloatV = float | None
-Vec2   = Annotated[tuple[FloatV, FloatV]                 | Sequence[FloatV], Literal[2]]
-Vec4   = Annotated[tuple[FloatV, FloatV, FloatV, FloatV] | Sequence[FloatV], Literal[4]]
+Item   = Union[int, str]
+FloatV = Union[float, None]
+Vec2 = Annotated[Union[Tuple[FloatV, FloatV], Sequence[FloatV]], Literal[2]]
+Vec4 = Annotated[Union[Tuple[FloatV, FloatV, FloatV, FloatV], Sequence[FloatV]], Literal[4]]
 
 NaN = math.nan
 
@@ -67,9 +73,9 @@ def _to_value(value: Any, default: Any):
         return default
     return value
 
-def _to_float_arr(value: Sequence[float | None] | float | None, length: int, default: float = NaN) -> 'array[float]':
+def _to_float_arr(value: Union[Sequence[Optional[float]], Optional[float]], length: int, default: float = float('nan')) -> 'array[float]':
     """
-    # Non-Sequence value (None | float('nan'))
+    # Non-Sequence value (Union[None, float]('nan'))
     >>> arr = _to_float_array(None, 2)
     >>> len(arr) == 2 and all(_is_nan(v) for v in arr)
     True
@@ -82,12 +88,12 @@ def _to_float_arr(value: Sequence[float | None] | float | None, length: int, def
     >>> len(arr) == 4 and all(v == 20 for v in arr)
     True
 
-    # Sequence[float | nan | None], len(value) >= 4
+    # Sequence[Union[float, nan] | None], len(value) >= 4
     >>> arr = _to_float_array([20, None, float("nan"), 10, 0, 0], 4, -5.0)  # 6-len input
     >>> tuple(arr) == (20, -5.0, -5.0, 10)
     True
 
-    # Sequence[float | float('nan') | None], len(value) < 4
+    # Sequence[Union[float, float]('nan') | None], len(value) < 4
     >>> arr = _to_float_array([20, None], 4, -5.0)
     >>> tuple(arr) == (20, -5.0, -5.0, -5.0)
     True
@@ -215,13 +221,13 @@ def _anchor_position_C(item_wt: float, item_ht: float, cell_x: float, cell_y: fl
 
 
 
-@dataclasses.dataclass(slots=True)
+@dataclasses.dataclass
 class ItemData:
     """Contains the size and placement information of an item attached
     to a `Grid` object.
 
     Attributes:
-        * item (int | str): The target item's integer uuid or string alias.
+        * item (Union[int, str]): The target item's integer uuid or string alias.
 
         * cellspan (tuple[int, int, int, int]): Contains coordinates for
         the target cell range, as `(col_start, row_start, col_end, row_end)`.
@@ -240,6 +246,8 @@ class ItemData:
 
         * is_text (bool): If True, the target item an `mvText` object.
     """
+    __slots__ = ('item', 'cellspan', 'max_size', 'padding', 'positioner', 'rect_setter', 'is_text')
+
     item       : Item
     cellspan   : tuple[int, int, int, int]
     max_size   : Sequence[float]
@@ -267,9 +275,9 @@ class _GridSetting(Generic[_T]):
         self._key = self._key or name
 
     @overload
-    def __get__(self, inst: Any, cls: type | None = ...) -> _T: ...
+    def __get__(self, inst: Any, cls: Union[type, None] = ...) -> _T: ...
     @overload
-    def __get__(self, inst: None, cls: type | None = None) -> Self: ...
+    def __get__(self, inst: None, cls: Union[type, None] = None) -> Self: ...
     def __get__(self, inst: Any, cls: Any = None):
         if inst is None:
             return self
@@ -287,7 +295,7 @@ class _GridComponent:
     spacing: _GridSetting['array[float]'] = dataclasses.field(default=_GridSetting('spacing'))
     padding: _GridSetting['array[float]'] = dataclasses.field(default=_GridSetting('padding'))
 
-    def __init__(self, *, label: str | None = None, spacing: FloatV = None, padding: Vec2 | FloatV = None, **kwargs):
+    def __init__(self, *, label: Union[str, None] = None, spacing: FloatV = None, padding: Union[Vec2, FloatV] = None, **kwargs):
         self.configure(label=label, spacing=spacing, padding=padding, **kwargs)
 
     def configure(self, **kwargs) -> None:
@@ -351,7 +359,7 @@ class Slot(_GridComponent):
     size  : _GridSetting[int]   = dataclasses.field(default=_GridSetting('size'))
 
     @overload
-    def __init__(self, *, label: str = ..., spacing: FloatV = ..., padding: Vec2 | FloatV = ..., weight: FloatV = ..., size: FloatV = ...) -> None: ...  # type: ignore
+    def __init__(self, *, label: str = ..., spacing: FloatV = ..., padding: Union[Vec2, FloatV] = ..., weight: FloatV = ..., size: FloatV = ...) -> None: ...  # type: ignore
     def __init__(self, *, weight: Any = 1.0, size: Any = 0, **kwargs) -> None:
         """Args:
             * label: Used to update `self.label`. None is treated as ''.
@@ -385,7 +393,7 @@ class Slot(_GridComponent):
         super().__init__(weight=weight, size=size, **kwargs)
 
     @overload
-    def configure(self, *, label: str = ..., spacing: FloatV = ..., padding: Vec2 | FloatV = ..., weight: FloatV = ..., size: FloatV = ...) -> None: ... # type: ignore
+    def configure(self, *, label: str = ..., spacing: FloatV = ..., padding: Union[Vec2, FloatV] = ..., weight: FloatV = ..., size: FloatV = ...) -> None: ... # type: ignore
     def configure(self, **kwargs) -> None:
         if 'weight' in kwargs:
             self._weight = max(0.0, _to_value(kwargs['weight'], 0.0))
@@ -439,7 +447,7 @@ class Axis(_GridComponent, Iterable[Slot], Sized):
     length: _GridSetting[int] = dataclasses.field(default=_GridSetting('length'))
 
     @overload
-    def __init__(self, length: int = ..., *, label: str = ..., spacing: FloatV = ..., padding: Vec2 | FloatV = ...) -> None: ...  # type: ignore
+    def __init__(self, length: int = ..., *, label: str = ..., spacing: FloatV = ..., padding: Union[Vec2, FloatV] = ...) -> None: ...  # type: ignore
     def __init__(self, length: int = 0, **kwargs) -> None:
         """Args:
             * length: Integer value used to update `self.length`.
@@ -461,7 +469,7 @@ class Axis(_GridComponent, Iterable[Slot], Sized):
         super().__init__(length=length, **kwargs)
 
     @overload
-    def configure(self, *, label: str = ..., spacing: FloatV = ..., padding: Vec2 | FloatV = ..., length: int = ...): ...  # type: ignore
+    def configure(self, *, label: str = ..., spacing: FloatV = ..., padding: Union[Vec2, FloatV] = ..., length: int = ...): ...  # type: ignore
     def configure(self, **kwargs):
         if 'length' in kwargs:
             self.resize(kwargs['length'])
@@ -537,7 +545,7 @@ class Axis(_GridComponent, Iterable[Slot], Sized):
     def __truediv__(self, x: _N) -> _N:
         return len(self) * x
 
-    def __floordiv__(self, x: _N) -> _N | float:
+    def __floordiv__(self, x: _N) -> Union[_N, float]:
         return len(self) // x
 
     def __mod__(self, x: _N) -> _N:
@@ -547,7 +555,7 @@ class Axis(_GridComponent, Iterable[Slot], Sized):
         length = len(self)
         return (length // x, length % x)
 
-    def __pow__(self, x: int, mod: int | None = None) -> int:
+    def __pow__(self, x: int, mod: Union[int, None] = None) -> int:
         return pow(len(self), x, mod)
 
     def __round__(self, ndigits: int = 0):
@@ -693,7 +701,7 @@ class Grid(_GridComponent):
         * rows (Axis): Living representation of the grid's rows (y-axis).
         See the `Axis` class for more information.
 
-        * target (int | str): The integer identifier or string alias of the
+        * target (Union[int, str]): The integer identifier or string alias of the
         item used as the grid's positional reference. Additionally, it's
         visibility state is used to determine whether or not to display (draw)
         the grid. The size of the target item is also used as fallback values
@@ -811,7 +819,7 @@ class Grid(_GridComponent):
     __drawlist = '[mvViewportDrawlist] Grid'
 
     @overload
-    def __init__(self, cols: int = ..., rows: int = ..., target: Item = ..., *, label: str | None = ..., padding: Vec4 | FloatV = ..., spacing: Vec2 | FloatV = ..., width: FloatV = ..., height: FloatV = ..., offsets: Vec4 | FloatV = ..., rect_getter: _RectGetter = ..., overlay: bool = ..., show: bool = ...) -> None: ...  # type: ignore
+    def __init__(self, cols: int = ..., rows: int = ..., target: Item = ..., *, label: Union[str, None] = ..., padding: Union[Vec4, FloatV] = ..., spacing: Union[Vec2, FloatV] = ..., width: FloatV = ..., height: FloatV = ..., offsets: Union[Vec4, FloatV] = ..., rect_getter: _RectGetter = ..., overlay: bool = ..., show: bool = ...) -> None: ...  # type: ignore
     def __init__(
         self,
         cols       : int  = 1,
@@ -907,7 +915,7 @@ class Grid(_GridComponent):
         self._trashbin.clear()
 
     @overload
-    def configure(self, *, cols: int = ..., rows: int = ..., target: Item = ..., label: str | None = ..., padding: Vec4 | FloatV = ..., spacing: Vec2 | FloatV = ..., offsets: Vec4 | FloatV = ..., width: FloatV = ..., height: FloatV = ..., rect_getter: _RectGetter = ..., overlay: bool = ..., show: bool = ...): ...  # type: ignore
+    def configure(self, *, cols: int = ..., rows: int = ..., target: Item = ..., label: Union[str, None] = ..., padding: Union[Vec4, FloatV] = ..., spacing: Union[Vec2, FloatV] = ..., offsets: Union[Vec4, FloatV] = ..., width: FloatV = ..., height: FloatV = ..., rect_getter: _RectGetter = ..., overlay: bool = ..., show: bool = ...): ...  # type: ignore
     def configure(self, **kwargs):
         """Update the grid's settings.
 
@@ -1028,21 +1036,42 @@ class Grid(_GridComponent):
     ANCHORS = tuple(s.lower() for s in _ANCHOR_MAP)
 
     @overload
-    def push(self, item: Item, col: int, row: int, /, *, anchor: str = ..., rect_setter: _RectSetter = ..., max_size: Vec2 | FloatV = ..., padding: Vec4 | FloatV = ...): ...
+    def push(self, item: Item, col: int, row: int, /, *, anchor: str = ..., rect_setter: _RectSetter = ..., max_size: Union[Vec2, FloatV] = ..., padding: Union[Vec4, FloatV] = ...): ...
     @overload
-    def push(self, item: Item, col: int, row: int, /, *, anchor: str = ..., rect_setter: _RectSetter = ..., max_width: int = ..., max_height: int = ..., padding: Vec4 | FloatV = ...): ...
+    def push(self, item: Item, col: int, row: int, /, *, anchor: str = ..., rect_setter: _RectSetter = ..., max_width: int = ..., max_height: int = ..., padding: Union[Vec4, FloatV] = ...): ...
     @overload
-    def push(self, item: Item, col: int, row: int, /, *, anchor: str = ..., rect_setter: _RectSetter = ..., max_size: Vec2 | FloatV = ..., x1_pad: int = ..., y1_pad: int = ..., x2_pad: int = ..., y2_pad: int = ...): ...
+    def push(self, item: Item, col: int, row: int, /, *, anchor: str = ..., rect_setter: _RectSetter = ..., max_size: Union[Vec2, FloatV] = ..., x1_pad: int = ..., y1_pad: int = ..., x2_pad: int = ..., y2_pad: int = ...): ...
     @overload
     def push(self, item: Item, col: int, row: int, /, *, anchor: str = ..., rect_setter: _RectSetter = ..., max_width: int = ..., max_height: int = ..., x1_pad: int = ..., y1_pad: int = ..., x2_pad: int = ..., y2_pad: int = ...): ...
+
     @overload
-    def push(self, item: Item, cell_start: tuple[int, int] | Sequence[int], cell_stop: tuple[int, int] | Sequence[int] | None = ..., /, *, anchor: str = ..., rect_setter: _RectSetter = ..., max_size: Vec2 | FloatV = ..., padding: Vec4 | FloatV = ...): ...
+    def push(self, item: Item, cell_start: Union[Tuple[int, int], Sequence[int]],
+             cell_stop: Union[Tuple[int, int], Sequence[int], None] = ..., /, *, anchor: str = ...,
+             rect_setter: _RectSetter = ..., max_size: Union[Vec2, Optional[float]] = ...,
+             padding: Union[Vec4, Optional[float]] = ...):
+        ...
+
     @overload
-    def push(self, item: Item, cell_start: tuple[int, int] | Sequence[int], cell_stop: tuple[int, int] | Sequence[int] | None = ..., /, *, anchor: str = ..., rect_setter: _RectSetter = ..., max_width: int = ..., max_height: int = ..., padding: Vec4 | FloatV = ...): ...
+    def push(self, item: Item, cell_start: Union[Tuple[int, int], Sequence[int]],
+             cell_stop: Union[Tuple[int, int], Sequence[int], None] = ..., /, *, anchor: str = ...,
+             rect_setter: _RectSetter = ..., max_width: int = ..., max_height: int = ...,
+             padding: Union[Vec4, Optional[float]] = ...):
+        ...
+
     @overload
-    def push(self, item: Item, cell_start: tuple[int, int] | Sequence[int], cell_stop: tuple[int, int] | Sequence[int] | None = ..., /, *, anchor: str = ..., rect_setter: _RectSetter = ..., max_size: Vec2 | FloatV = ..., x1_pad: int = ..., y1_pad: int = ..., x2_pad: int = ..., y2_pad: int = ...): ...
+    def push(self, item: Item, cell_start: Union[Tuple[int, int], Sequence[int]],
+             cell_stop: Union[Tuple[int, int], Sequence[int], None] = ..., /, *, anchor: str = ...,
+             rect_setter: _RectSetter = ..., max_size: Union[Vec2, Optional[float]] = ..., x1_pad: int = ...,
+             y1_pad: int = ..., x2_pad: int = ..., y2_pad: int = ...):
+        ...
+
     @overload
-    def push(self, item: Item, cell_start: tuple[int, int] | Sequence[int], cell_stop: tuple[int, int] | Sequence[int] | None = ..., /, *, anchor: str = ..., rect_setter: _RectSetter = ..., max_width: int = ..., max_height: int = ..., x1_pad: int = ..., y1_pad: int = ..., x2_pad: int = ..., y2_pad: int = ...): ...
+    def push(self, item: Item, cell_start: Union[Tuple[int, int], Sequence[int]],
+             cell_stop: Union[Tuple[int, int], Sequence[int], None] = ..., /, *, anchor: str = ...,
+             rect_setter: _RectSetter = ..., max_width: int = ..., max_height: int = ..., x1_pad: int = ...,
+             y1_pad: int = ..., x2_pad: int = ..., y2_pad: int = ...):
+        ...
+
     def push(self, item: Item, cell_start: Any, cell_stop: Any = None, /, *, anchor: str = 'c', rect_setter: _RectSetter = _set_item_rect, max_size: Any = None, max_width: Any = None, max_height: Any = None, padding: Any = None, x1_pad: Any = None, y1_pad: Any = None, x2_pad: Any = None, y2_pad: Any = None):
         """Attach an item to the grid.
 
